@@ -9,6 +9,35 @@ var EventEmitter = require('events').EventEmitter,
 
 
 /**
+ * Useful function to use in tests.
+ */
+function valueEquals(test, expected) {
+    return function (err, x) {
+        if (err) {
+            test.equal(err, null, 'Expected a value to be emitted.');
+        } else {
+            test.equal(x, expected, 'Incorrect value emitted.');
+        }
+    };
+}
+
+function errorEquals(test, expectedMsg) {
+    return function (err, x) {
+        if (err) {
+            test.equal(err.message, expectedMsg, 'Error emitted with incorrect message.');
+        } else {
+            test.notEqual(err, null, 'No error emitted.');
+        }
+    };
+}
+
+function anyError(test) {
+    return function (err, x) {
+        test.notEqual(err, null, 'No error emitted.');
+    };
+}
+
+/**
  * Functional utils
  */
 
@@ -369,6 +398,26 @@ exports['errors - rethrow'] = function (test) {
     test.done();
 };
 
+exports['errors - argument function throws'] = function (test) {
+    test.expect(4);
+    var err1 = new Error('one');
+    var err2 = new Error('two');
+    var s = _(function (push, next) {
+        push(null, 1);
+        push(err1);
+        push(null, 2);
+        push(null, _.nil);
+    }).errors(function () {
+        throw err2;
+    });
+
+    s.pull(valueEquals(test, 1));
+    s.pull(errorEquals(test, 'two'));
+    s.pull(valueEquals(test, 2));
+    s.pull(valueEquals(test, _.nil));
+    test.done();
+};
+
 exports['errors - ArrayStream'] = function (test) {
     var errs = [];
     var f = function (err, rethrow) {
@@ -424,6 +473,25 @@ exports['stopOnError'] = function (test) {
         test.same(errs, [err1]);
         test.done();
     });
+};
+
+exports['stopOnError - argument function throws'] = function (test) {
+    test.expect(3);
+    var err1 = new Error('one');
+    var err2 = new Error('two');
+    var s = _(function (push) {
+        push(null, 1);
+        push(err1);
+        push(null, 2);
+        push(null, _.nil);
+    }).stopOnError(function () {
+        throw err2;
+    });
+
+    s.pull(valueEquals(test, 1));
+    s.pull(errorEquals(test, 'two'));
+    s.pull(valueEquals(test, _.nil));
+    test.done();
 };
 
 exports['stopOnError - ArrayStream'] = function (test) {
@@ -1422,6 +1490,19 @@ exports['reduce'] = function (test) {
     test.done();
 };
 
+exports['reduce - argument function throws'] = function (test) {
+    test.expect(2);
+    var err = new Error('error');
+    var s = _([1,2,3,4,5]).reduce(0, function (memo, x) {
+        if (x === 3) throw err;
+        return memo + x;
+    });
+
+    s.pull(errorEquals(test, 'error'));
+    s.pull(valueEquals(test, _.nil));
+    test.done();
+};
+
 exports['reduce - ArrayStream'] = function (test) {
     function add(a, b) {
         return a + b;
@@ -1473,6 +1554,19 @@ exports['reduce1'] = function (test) {
     test.done();
 };
 
+exports['reduce1 - argument function throws'] = function (test) {
+    test.expect(2);
+    var err = new Error('error');
+    var s = _([1,2,3,4,5]).reduce1(function (memo, x) {
+        if (x === 3) throw err;
+        return memo + x;
+    });
+
+    s.pull(errorEquals(test, 'error'));
+    s.pull(valueEquals(test, _.nil));
+    test.done();
+};
+
 exports['reduce1 - ArrayStream'] = function (test) {
     function add(a, b) {
         return a + b;
@@ -1518,6 +1612,22 @@ exports['scan'] = function (test) {
     _.scan(10)(add)([1,2,3,4]).toArray(function (xs) {
         test.same(xs, [10, 11, 13, 16, 20]);
     });
+    test.done();
+};
+
+exports['scan - argument function throws'] = function (test) {
+    test.expect(5);
+    var err = new Error('error');
+    var s = _([1,2,3,4,5]).scan(0, function (memo, x) {
+        if (x === 3) throw err;
+        return memo + x;
+    });
+
+    s.pull(valueEquals(test, 0));
+    s.pull(valueEquals(test, 1));
+    s.pull(valueEquals(test, 3));
+    s.pull(errorEquals(test, 'error'));
+    s.pull(valueEquals(test, _.nil));
     test.done();
 };
 
@@ -1594,6 +1704,21 @@ exports['scan1'] = function (test) {
     _.scan1(add, [1]).toArray(function (xs) {
         test.same(xs, [1]);
     });
+    test.done();
+};
+
+exports['scan1 - argument function throws'] = function (test) {
+    test.expect(4);
+    var err = new Error('error');
+    var s = _([1,2,3,4,5]).scan1(function (memo, x) {
+        if (x === 3) throw err;
+        return memo + x;
+    });
+
+    s.pull(valueEquals(test, 1));
+    s.pull(valueEquals(test, 3));
+    s.pull(errorEquals(test, 'error'));
+    s.pull(valueEquals(test, _.nil));
     test.done();
 };
 
@@ -1704,7 +1829,7 @@ exports['concat - piped ArrayStream'] = function (test) {
     _.concat(streamify([3,4]).pipe(through()), streamify([1,2])).toArray(function (xs) {
         test.same(xs, [1,2,3,4]);
         test.done();
-    });  
+    });
 };
 
 exports['concat - piped ArrayStream - paused'] = function (test) {
@@ -1998,6 +2123,23 @@ exports['map'] = function (test) {
     test.done();
 };
 
+exports['map - argument function throws'] = function (test) {
+    test.expect(6);
+    var err = new Error('error');
+    var s = _([1,2,3,4,5]).map(function (x) {
+        if (x === 3) throw err;
+        return x + 1;
+    });
+
+    s.pull(valueEquals(test, 2));
+    s.pull(valueEquals(test, 3));
+    s.pull(errorEquals(test, 'error'));
+    s.pull(valueEquals(test, 5));
+    s.pull(valueEquals(test, 6));
+    s.pull(valueEquals(test, _.nil));
+    test.done();
+};
+
 exports['map - ArrayStream'] = function (test) {
     function doubled(x) {
         return x * 2;
@@ -2038,6 +2180,29 @@ exports['map to value'] = function (test) {
     test.done();
 };
 
+exports['doto'] = function (test) {
+    test.expect(4);
+
+    var seen;
+    function record(x) {
+        seen.push(x * 2);
+    }
+
+    seen = [];
+    _.doto(record, [1, 2, 3, 4]).toArray(function (xs) {
+        test.same(xs, [1, 2, 3, 4]);
+        test.same(seen, [2, 4, 6, 8]);
+    });
+
+    // partial application
+    seen = [];
+    _.doto(record)([1, 2, 3, 4]).toArray(function (xs) {
+        test.same(xs, [1, 2, 3, 4]);
+        test.same(seen, [2, 4, 6, 8]);
+    });
+    test.done();
+};
+
 exports['flatMap'] = function (test) {
     var f = function (x) {
         return _(function (push, next) {
@@ -2051,6 +2216,23 @@ exports['flatMap'] = function (test) {
         test.same(xs, [2,4,6,8]);
         test.done();
     });
+};
+
+exports['flatMap - argument function throws'] = function (test) {
+    test.expect(4);
+    var err = new Error('error');
+    var s = _([1,2,3,4]).flatMap(function (x) {
+        if (x === 1) return _([x]);
+        if (x === 2) throw err;
+        if (x === 3) return _([]);
+        return true;
+    });
+
+    s.pull(valueEquals(test, 1));
+    s.pull(errorEquals(test, 'error'));
+    s.pull(anyError(test));
+    s.pull(valueEquals(test, _.nil));
+    test.done();
 };
 
 exports['flatMap - ArrayStream'] = function (test) {
@@ -2141,6 +2323,21 @@ exports['filter'] = function (test) {
     test.done();
 };
 
+exports['filter - argument function throws'] = function (test) {
+    test.expect(3);
+    var err = new Error('error');
+    var s = _([1,2,3]).filter(function (x) {
+        if (x === 2) throw err;
+        if (x === 3) return false;
+        return true;
+    });
+
+    s.pull(valueEquals(test, 1));
+    s.pull(errorEquals(test, 'error'));
+    s.pull(valueEquals(test, _.nil));
+    test.done();
+};
+
 exports['filter - ArrayStream'] = function (test) {
     function isEven(x) {
         return x % 2 === 0;
@@ -2178,6 +2375,23 @@ exports['flatFilter'] = function (test) {
         test.same(xs, [2,4]);
         test.done();
     });
+};
+
+exports['flatFilter - argument function throws'] = function (test) {
+    test.expect(4);
+    var err = new Error('error');
+    var s = _([1,2,3,4]).flatFilter(function (x) {
+        if (x === 1) return _([false]);
+        if (x === 2) throw err;
+        if (x === 3) return _([]);
+        return true;
+    });
+
+    s.pull(errorEquals(test, 'error'));
+    s.pull(anyError(test));
+    s.pull(anyError(test));
+    s.pull(valueEquals(test, _.nil));
+    test.done();
 };
 
 exports['flatFilter - ArrayStream'] = function (test) {
@@ -2284,6 +2498,21 @@ exports['find'] = function (test) {
         test.same(xs, [{type: 'bar', name: '123'}]);
     });
 
+    test.done();
+};
+
+exports['find - argument function throws'] = function (test) {
+    test.expect(4);
+    var err = new Error('error');
+    var s = _([1,2,3,4,5]).find(function (x) {
+        if (x < 3) throw err;
+        return true;
+    });
+
+    s.pull(errorEquals(test, 'error'));
+    s.pull(errorEquals(test, 'error'));
+    s.pull(valueEquals(test, 3));
+    s.pull(valueEquals(test, _.nil));
     test.done();
 };
 
@@ -2401,6 +2630,19 @@ exports['find - GeneratorStream'] = function (test) {
           _.group(null)(primatives).toArray(_.log);
         });
 
+        test.done();
+    };
+
+    exports['group - argument function throws'] = function (test) {
+        test.expect(2);
+        var err = new Error('error');
+        var s = _([1,2,3,4,5]).group(function (x) {
+            if (x === 5) throw err
+            return x % 2 == 0 ? 'even' : 'odd';
+        });
+
+        s.pull(errorEquals(test, 'error'));
+        s.pull(valueEquals(test, _.nil));
         test.done();
     };
 
@@ -2535,6 +2777,33 @@ exports['zip'] = function (test) {
     // partial application
     _.zip([1,2,3,4,5])(['a', 'b', 'c']).toArray(function (xs) {
         test.same(xs, [['a',1], ['b',2], ['c',3]]);
+    });
+    test.done();
+};
+
+exports['zip - source emits error'] = function (test) {
+    test.expect(4);
+    var err = new Error('error');
+    var s1 = _([1,2]);
+    var s2 = _(function (push) {
+        push(null, 'a');
+        push(err);
+        push(null, 'b');
+        push(null, _.nil);
+    });
+
+    var s = s1.zip(s2);
+    s.pull(function (err, x) {
+        test.deepEqual(x, [1, 'a']);
+    });
+    s.pull(function (err, x) {
+        test.equal(err.message, 'error');
+    });
+    s.pull(function (err, x) {
+        test.deepEqual(x, [2, 'b']);
+    });
+    s.pull(function (err, x) {
+        test.equal(x, _.nil);
     });
     test.done();
 };
